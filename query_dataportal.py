@@ -5,8 +5,6 @@
 """
 # from cryoet_data_portal import Dataset as DP_Dataset
 from cryoet_data_portal import Client, Annotation, Tomogram
-from ome_zarr.reader import Reader as ZarrReader
-from ome_zarr.io import parse_url
 from tqdm.auto import tqdm
 import numpy as np
 
@@ -78,24 +76,14 @@ def save_tomos_with_obj(objects: List[str], save_dir, ensure_newest=False):
             with open(tomo_metadata_path, 'w') as f:
                 json.dump(tomo_metadata, f)
 
-def read_zarr(zarr_path: str) -> np.ndarray:
-    """Finds array with highest resolution and returns it as a np array"""
 
-    zarr_url = parse_url(zarr_path)
-    reader = ZarrReader(zarr_url)
-    image_node = list(reader())[0]
-    dask_data = image_node.data
 
-    # Find element with highest resolution
-    dask_array_resolutions = [math.prod(d.shape) for d in dask_data]
-    idx_high_res = np.argmax(dask_array_resolutions)
-
-    # Convert to np array
-    np_array = dask_data[idx_high_res].compute()
-    return np_array
-
-# save_tomos_with_obj(
-#     ['bacterial-type flagellum motor'],
-#     '/home/mward19/nobackup/autodelete/fm-data-2'
-# )
-tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
+if __name__ == '__main__':
+    # save_tomos_with_obj(
+    #     ['bacterial-type flagellum motor'],
+    #     '/home/mward19/nobackup/autodelete/fm-data-2'
+    # )
+    from dataset import TomoTiles
+    read_zarr = TomoTiles.read_zarr
+    tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
+    print(tomo_array.shape)
