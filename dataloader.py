@@ -20,9 +20,9 @@ def hide_output(func, *args, **kwargs):
         with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
             return func(*args, **kwargs)# 
 
-def save_tomos_with_obj(objects: List[str], save_dir, overwrite_labels=False):
-    image_dir = os.path.join(save_dir, 'images')
-    labels_path = os.path.join(save_dir, 'labels.json')
+def save_tomos_with_obj(objects: List[str], save_dir, ensure_newest=False):
+    # image_dir = os.path.join(save_dir, 'images')
+    # labels_path = os.path.join(save_dir, 'labels.json')
 
     client = Client()
     annotations = sum(
@@ -34,64 +34,57 @@ def save_tomos_with_obj(objects: List[str], save_dir, overwrite_labels=False):
     if len(annotations) == 0:
         raise Exception(f'Found 0 annotations corresponding to {object}. Exiting')
 
-    annotations_by_tomo = defaultdict(list)
-
-    for ann in tqdm(annotations, desc='Fetching metadata'):
+    for ann in tqdm(annotations, desc='Downloading tomograms'):
         all_tomograms = ann.run.tomograms
         if len(all_tomograms) != 1:
             raise ValueError(f'Annotation {ann.id} has more than 1 associated tomogram (it has {len(all_tomograms)})')
-        
-        annotations_by_tomo[all_tomograms[0].id].append(ann)
-    
-    labels = dict()
-    for tomo_id, annotations in tqdm(
-            annotations_by_tomo.items(), 
-            total=len(annotations_by_tomo),
-            desc='Loading data'
-        ):
-        # Get the tomogram corresponding to this ID
-        tomograms = Tomogram.find(client, [Tomogram.id == tomo_id])
-        if len(tomograms) != 1:
-            raise ValueError(f'Tomogram id {tomo_id} has more than 1 associated tomogram (it has {len(tomograms)})')
-        tomogram = tomograms[0]
+        tomogram = all_tomograms[0]
 
-        # Save it to the cache
-        image_path = os.path.join(image_dir, f'{tomogram.name}.zarr')
-        # Only save tomogram if not saved already
-        if not os.path.isfile(image_path):
-            tqdm.write(f'Saving tomogram {tomogram.name} as {image_path}')
-            hide_output(tomogram.download_omezarr, image_dir)
+        # Save tomogram if not saved already
+        tomogram_dir = os.path.join(save_dir, f'tomo-{tomogram.id}')
+        zarr_path = os.path.join(tomogram_dir, f'{tomogram.name}.zarr')
+        if not os.path.exists(zarr_path): # Not path.isfile because zarr is technically a dir
+            tqdm.write(f'Saving tomogram {tomogram.name} as {zarr_path}')
+            hide_output(tomogram.download_omezarr, tomogram_dir)
         else:
-            tqdm.write(f'Already saved tomogram {tomogram.name} at {image_path}, skipping')
+            tqdm.write(f'Already saved tomogram {tomogram.name} at {zarr_path}')
 
-        # Save all associated annotations in labels
-        labels[tomo_id] = {
-            'tomo_id': tomo_id,
-            'tomo_name': tomogram.name,
-            'tomo_path': image_path,
-            'zarr_https': tomogram.https_omezarr_dir,
-            'ann_ids': [ann.id for ann in annotations],
-            'size_x': tomogram.size_x,
-            'size_y': tomogram.size_y,
-            'size_z': tomogram.size_z,
-            'voxel_spacing': tomogram.voxel_spacing,
-        }
+        has_ndjson = any(f.endswith(".ndjson") for f in os.listdir(tomogram_dir))
+        if ensure_newest or not has_ndjson:
+            tqdm.write(f'Saving annotation {ann.id}')
+            try:
+                hide_output(ann.download, dest_path=tomogram_dir, format='ndjson')
+            except KeyError as e:
+                pass
+        else:
+            tqdm.write(f'Found ndjson in {tomogram_dir}, assuming annotation {ann.id} is already saved')
 
-    with open(labels_path, 'w') as f:
-        json.dump(labels, f, indent=4)
-        tqdm.write(f'Saved labels to {labels_path}')
+        # Save tomogram info
+        tomo_metadata_path = os.path.join(tomogram_dir, 'tomo-metadata.json')
+        if not os.path.isfile(tomo_metadata_path): 
+            tomo_metadata = {
+                'id': tomogram.id,
+                'name': tomogram.name,
+                'zarr_https': tomogram.https_omezarr_dir,
+                'size_x': tomogram.size_x,
+                'size_y': tomogram.size_y,
+                'size_z': tomogram.size_z,
+                'voxel_spacing': tomogram.voxel_spacing,
+            }
+            with open(tomo_metadata_path, 'w') as f:
+                json.dump(tomo_metadata, f)
 
-def read_zarr(zarr_path):
-    reader = zarr.Reader(zarr_path)
-    print()
+# def read_zarr(zarr_path):
+#     reader = zarr.Reader(zarr_path)
+#     print()
 
-class TomogramSplitter:
-    def __init__(self, image_dir, labels_path):
-        with open(labels_path, 'r') as f:
-            self.labels = json.loads(labels_path)
+# class TomogramSplitter:
+#     def __init__(self, image_dir, labels_path):
+#         with open(labels_path, 'r') as f:
+#             self.labels = json.loads(labels_path)
 
 save_tomos_with_obj(
     ['bacterial-type flagellum motor'],
-    '/home/mward19/nobackup/autodelete/fm-data'
+    '/home/mward19/nobackup/autodelete/fm-data-2'
 )
 # read_zarr('/home/mward19/nobackup/autodelete/fm-data/images/')
