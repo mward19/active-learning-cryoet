@@ -51,6 +51,7 @@ def save_tomos_with_obj(objects: List[str], save_dir, ensure_newest=False):
         else:
             tqdm.write(f'Already saved tomogram {tomogram.name} at {zarr_path}')
 
+        # Save annotation
         has_ndjson = any(f.endswith(".ndjson") for f in os.listdir(tomogram_dir))
         if ensure_newest or not has_ndjson:
             tqdm.write(f'Saving annotation {ann.id}')
