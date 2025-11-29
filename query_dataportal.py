@@ -80,11 +80,11 @@ def save_tomos_with_obj(objects: List[str], save_dir, ensure_newest=False):
 
 
 if __name__ == '__main__':
-    # save_tomos_with_obj(
-    #     ['bacterial-type flagellum motor'],
-    #     '/home/mward19/nobackup/autodelete/fm-data-2'
-    # )
-    from dataset import TomoTiles
-    read_zarr = TomoTiles.read_zarr
-    tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
-    print(tomo_array.shape)
+    save_tomos_with_obj(
+        ['bacterial-type flagellum motor'],
+        '/home/mward19/nobackup/autodelete/fm-data-2'
+    )
+    # from dataset import TomoTiles
+    # read_zarr = TomoTiles.read_zarr
+    # tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
+    # print(tomo_array.shape)

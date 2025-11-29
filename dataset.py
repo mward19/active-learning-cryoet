@@ -1,12 +1,14 @@
 import numpy as np
 from ome_zarr.reader import Reader as ZarrReader
 from ome_zarr.io import parse_url
+from tqdm.auto import tqdm
 
 import os
 import math
 import json
-
-from matplotlib import pyplot as plt
+from itertools import product
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class TomoTiles:
     @staticmethod
@@ -29,6 +31,8 @@ class TomoTiles:
 
     def __init__(self, tomo_dir):
         """Assumes tomo_dir contains one .zarr file and n>0 .ndjson annotation files."""
+        self.tomo_dir = tomo_dir
+
         # Get zarr file
         zarr_files = [f for f in os.listdir(tomo_dir) if f.endswith(".zarr")]
         if len(zarr_files) != 1:
@@ -48,11 +52,17 @@ class TomoTiles:
             self.tomo_info = json.load(f)
         
         # Save tomogram shape data
-        self.tomo_shape = np.array([
-            self.tomo_info['size_x'], 
+        self.tomo_shape = np.array([ # Reverse because x, y, z reflect fortran ordering but numpy uses C-ordering
+            self.tomo_info['size_z'], 
             self.tomo_info['size_y'], 
-            self.tomo_info['size_z']
+            self.tomo_info['size_x']
         ])
+
+        self.tile_num_per_dim = None
+        self.original_to_tile = None
+        self.tile_to_original = None
+
+        self.tiles_dir = None
     
     def voxels_to_angstroms(self, vox):
         return vox * self.tomo_info['voxel_spacing'] 
@@ -60,39 +70,155 @@ class TomoTiles:
     def angstroms_to_voxels(self, ang):
         return ang / self.tomo_info['voxel_spacing']
 
-    def tile_with_points(self, tiles_dir: str='tiles', tile_size_angstroms=(256, 512, 512)):
-        """Tile up the tomogram, retaining and transforming any point annotations pertaining to this tomogram."""
-        # Convert tile size from tuple or list to np.ndarray if necessary
-        if not isinstance(tile_size_angstroms, np.ndarray):
-            tile_size_angstroms = np.array(tile_size_angstroms)
 
-        point_locs = []
+    def get_tiling_functions(self, tile_size_angstroms: np.ndarray):
+        # Divide up tomogram array
+        tomo_shape_angstroms = self.voxels_to_angstroms(self.tomo_shape)
+
+        # Calculate how many tiles we can fit in each dimension 
+        # (cover whole tomogram with minimal overlap between tiles)
+        self.tile_num_per_dim = np.ceil(tomo_shape_angstroms / tile_size_angstroms).astype(int)
+        # Get tile division points
+        division_points = [
+            np.linspace(
+                0, 
+                self.tomo_shape[i], 
+                self.tile_num_per_dim[i]
+            ) 
+            for i in range(3)
+        ]
+
+        # Function to convert original loc to tile loc (in voxels)
+        def original_to_tile(original_loc):
+            original_loc = np.array(original_loc)
+            # Find which tile this voxel belongs to
+            tile_idx = np.array([
+                np.searchsorted(division_points[d], original_loc[d], side="right") - 1
+                for d in range(3)
+            ])
+
+            # Clamp in case it falls exactly on the upper boundary
+            tile_idx = np.array([
+                max(0, min(tile_idx[d], len(division_points[d]) - 2)) for d in range(3)
+            ])
+
+            # Compute voxel coordinate inside that tile
+            tile_loc = np.array([
+                original_loc[d] - division_points[d][tile_idx[d]]
+                for d in range(3)
+            ])
+
+            return tile_idx, tile_loc
+        
+        def tile_to_original(tile_idx, tile_loc=np.array([0, 0, 0])):
+            tile_idx = np.array(tile_idx)
+            tile_loc = np.array(tile_loc)
+            return np.array([
+                division_points[d][tile_idx[d]] + tile_loc[d]
+                for d in range(3)
+            ])
+
+        # Save functions as class attributes
+        self.original_to_tile = original_to_tile
+        self.tile_to_original = tile_to_original
+
+        return self.original_to_tile, self.tile_to_original
+    
+    def tile_tomogram_points(self, tile_size_angstroms: np.ndarray=np.array([1280, 2560, 2560]), tiles_dir: str='tiles', overwrite=False):
+        """Tile up the tomogram, retaining and transforming any point annotations pertaining to this tomogram."""
+        if self.original_to_tile is None or self.tile_to_original is None or self.tile_num_per_dim is None:
+            self.get_tiling_functions(tile_size_angstroms)
+        tile_size_voxels = self.angstroms_to_voxels(tile_size_angstroms)
+
+        # Full tomogram array
+        tomo_array = self.read_zarr(self.zarr_file)
+
+        if np.any(tomo_array.shape != self.tomo_shape):
+            raise ValueError(
+                f"Tomogram array shape in tomo-metadata was {self.tomo_shape} "
+                f"but did not match the actual tomogram array shape {tomo_array.shape}"
+            )
+        
+        tiles_dir_full = os.path.join(self.tomo_dir, tiles_dir)
+        os.makedirs(tiles_dir_full, exist_ok=True)
+        self.tiles_dir = tiles_dir_full
+
+        # Figure out which tile each point belongs to and where in that tile
+        point_locs_by_tile = defaultdict(list)
         for ann_file in self.annotation_files:
             with open(ann_file, "r") as f:
                 anns = [json.loads(line) for line in f]
             for ann in anns:
                 if ann['type'] != 'point':
                     continue
-                point_locs.append([ # Reverse order to match C-ordering for numpy
+                point_original = np.array([
                     ann['location']['z'],
                     ann['location']['y'],
                     ann['location']['x'],
                 ])
+                tile_idx, tile_loc = self.original_to_tile(point_original)
+                point_locs_by_tile[tuple(int(i) for i in tile_idx)].append(tuple(int(i) for i in tile_loc))
+            
+        def write_points_to_json(json_path, points: list):
+            if len(points) == 0:
+                return
+            with open(json_path, 'w') as f:
+                json.dump(points, f, indent=4)
+
+        # Start separating and saving tiles
+        all_tile_indices = list(product(
+            range(int(self.tile_num_per_dim[0])), 
+            range(int(self.tile_num_per_dim[1])), 
+            range(int(self.tile_num_per_dim[2]))
+        ))
+
+        def save_tile(indices, pbar):
+            i, j, k = indices
+
+            tile_top_corner = self.tile_to_original(np.array([i, j, k]))
+            tile_bottom_corner = tile_top_corner + tile_size_voxels
+
+            # Extract slice
+            tc = tile_top_corner.astype(int)
+            bc = tile_bottom_corner.astype(int)
+            tile_array = tomo_array[tc[0]:bc[0], tc[1]:bc[1], tc[2]:bc[2]]
+
+            # Save it as np.ndarray
+            tile_name = f'tile-{i}-{j}-{k}'
+            this_tile_dir = os.path.join(tiles_dir_full, tile_name)
+            os.makedirs(this_tile_dir, exist_ok=True)
+            tile_npy_path = os.path.join(this_tile_dir, 'tile.npy')
+            if overwrite or not os.path.isfile(tile_npy_path):
+                np.save(tile_npy_path, tile_array)
+
+            # Save associated annotations, if there are any
+            points_in_tile = point_locs_by_tile[(i, j, k)]
+            points_json_path = os.path.join(this_tile_dir, 'points.json')
+
+            if overwrite or not os.path.isfile(points_json_path):
+                write_points_to_json(
+                    points_json_path, 
+                    points_in_tile
+                )
+                if len(points_in_tile) > 0:
+                    tqdm.write(f'Found {len(point_locs_by_tile[(i, j, k)])} point(s) in {tile_name}, saved to points.json')
+            
+            pbar.update()
+
+        # for indices in tqdm(all_tile_indices, desc='Saving tiles'):
+        with tqdm(total=len(all_tile_indices), desc='Saving tiles') as pbar:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                tqdm.write(f'Working with up to {executor._max_workers} workers')
+                tqdm.write(f'Saving to {self.tiles_dir}')
+                futures = [executor.submit(save_tile, idx, pbar) for idx in all_tile_indices]
+                # Wait for each future to finish to avoid premature program termination
+                for f in futures:
+                    f.result()
         
-        # Full tomogram array
-        tomo_array = self.read_zarr(self.zarr_file)
-
-        # Divide up array
-        tomo_shape_angstroms = self.voxels_to_angstroms(self.tomo_shape)
-
-        # Calculate how many tiles we can fit in each dimension
-        # tile_num_per_dim = 
-
-
 
 
 if __name__ == '__main__':
     data_path = '/home/mward19/nobackup/autodelete/fm-data-2'
     tiler = TomoTiles(os.path.join(data_path, 'tomo-10456'))
-    tiler.tile_with_points()
+    tiler.tile_tomogram_points(overwrite=True)
 
