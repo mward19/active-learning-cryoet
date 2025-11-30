@@ -8,7 +8,8 @@ import math
 import json
 from itertools import product
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+import argparse
 
 class TomoTiles:
     @staticmethod
@@ -79,11 +80,12 @@ class TomoTiles:
         # (cover whole tomogram with minimal overlap between tiles)
         self.tile_num_per_dim = np.ceil(tomo_shape_angstroms / tile_size_angstroms).astype(int)
         # Get tile division points
-        division_points = [
+        self.division_points = [
             np.linspace(
                 0, 
                 self.tomo_shape[i], 
-                self.tile_num_per_dim[i]
+                self.tile_num_per_dim[i],
+                endpoint=False
             ) 
             for i in range(3)
         ]
@@ -93,18 +95,18 @@ class TomoTiles:
             original_loc = np.array(original_loc)
             # Find which tile this voxel belongs to
             tile_idx = np.array([
-                np.searchsorted(division_points[d], original_loc[d], side="right") - 1
+                np.searchsorted(self.division_points[d], original_loc[d], side="right") - 1
                 for d in range(3)
             ])
 
             # Clamp in case it falls exactly on the upper boundary
             tile_idx = np.array([
-                max(0, min(tile_idx[d], len(division_points[d]) - 2)) for d in range(3)
+                max(0, min(tile_idx[d], len(self.division_points[d]) - 2)) for d in range(3)
             ])
 
             # Compute voxel coordinate inside that tile
             tile_loc = np.array([
-                original_loc[d] - division_points[d][tile_idx[d]]
+                original_loc[d] - self.division_points[d][tile_idx[d]]
                 for d in range(3)
             ])
 
@@ -114,7 +116,7 @@ class TomoTiles:
             tile_idx = np.array(tile_idx)
             tile_loc = np.array(tile_loc)
             return np.array([
-                division_points[d][tile_idx[d]] + tile_loc[d]
+                self.division_points[d][tile_idx[d]] + tile_loc[d]
                 for d in range(3)
             ])
 
@@ -183,6 +185,10 @@ class TomoTiles:
             bc = tile_bottom_corner.astype(int)
             tile_array = tomo_array[tc[0]:bc[0], tc[1]:bc[1], tc[2]:bc[2]]
 
+            if np.all((i, j, k) == (0, 1, 1)):
+                from pdb import set_trace
+                set_trace()
+
             # Save it as np.ndarray
             tile_name = f'tile-{i}-{j}-{k}'
             this_tile_dir = os.path.join(tiles_dir_full, tile_name)
@@ -207,18 +213,33 @@ class TomoTiles:
 
         # for indices in tqdm(all_tile_indices, desc='Saving tiles'):
         with tqdm(total=len(all_tile_indices), desc='Saving tiles') as pbar:
-            with ThreadPoolExecutor(max_workers=8) as executor:
+            with ThreadPoolExecutor(max_workers=1) as executor:
                 tqdm.write(f'Working with up to {executor._max_workers} workers')
                 tqdm.write(f'Saving to {self.tiles_dir}')
                 futures = [executor.submit(save_tile, idx, pbar) for idx in all_tile_indices]
                 # Wait for each future to finish to avoid premature program termination
                 for f in futures:
                     f.result()
-        
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--index", type=int, required=True)
+    parser.add_argument(
+        "--data-path", 
+        type=str,
+        default="/home/mward19/nobackup/autodelete/fm-data-2"
+    )
+    args = parser.parse_args()
 
-if __name__ == '__main__':
-    data_path = '/home/mward19/nobackup/autodelete/fm-data-2'
-    tiler = TomoTiles(os.path.join(data_path, 'tomo-10456'))
+    dirs = sorted(
+        d for d in os.listdir(args.data_path)
+        if d.startswith("tomo-")
+    )
+
+    target = os.path.join(args.data_path, dirs[args.index])
+
+    tiler = TomoTiles(target)
     tiler.tile_tomogram_points(overwrite=True)
-
+    # target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10233'
+    # tiler = TomoTiles(target)
+    # tiler.tile_tomogram_points(overwrite=True)
