@@ -60,7 +60,7 @@ class TomoTiles:
         ])
 
         self.tile_num_per_dim = None
-        self.original_to_tile = None
+        self.original_to_tiles = None
         self.tile_to_original = None
 
         self.tiles_dir = None
@@ -72,13 +72,15 @@ class TomoTiles:
         return ang / self.tomo_info['voxel_spacing']
 
 
-    def get_tiling_functions(self, tile_size_angstroms: np.ndarray):
+    def get_tiling_functions(self, tile_size_angstroms: np.ndarray, min_overlap_angstroms: np.ndarray):
         # Divide up tomogram array
+
         tomo_shape_angstroms = self.voxels_to_angstroms(self.tomo_shape)
 
         # Calculate how many tiles we can fit in each dimension 
         # (cover whole tomogram with minimal overlap between tiles)
-        self.tile_num_per_dim = np.ceil(tomo_shape_angstroms / tile_size_angstroms).astype(int)
+        step_size_angstroms = tile_size_angstroms - min_overlap_angstroms
+        self.tile_num_per_dim = np.ceil(tomo_shape_angstroms / step_size_angstroms).astype(int)
         # Get tile division points
         self.division_points = [
             np.linspace(
@@ -91,26 +93,41 @@ class TomoTiles:
         ]
 
         # Function to convert original loc to tile loc (in voxels)
-        def original_to_tile(original_loc):
+        def original_to_tiles(original_loc):
             original_loc = np.array(original_loc)
-            # Find which tile this voxel belongs to
-            tile_idx = np.array([
-                np.searchsorted(self.division_points[d], original_loc[d], side="right") - 1
-                for d in range(3)
-            ])
+            tiles = []
 
-            # Clamp in case it falls exactly on the upper boundary
-            tile_idx = np.array([
-                max(0, min(tile_idx[d], len(self.division_points[d]) - 2)) for d in range(3)
-            ])
+            for d in range(3):
+                # Find all tiles along this dimension that contain the voxel
+                # Tile covers from division_point to division_point + tile_size
+                candidates = []
+                for i in range(len(self.division_points[d]) - 1):
+                    start = self.division_points[d][i]
+                    end = self.division_points[d][i + 1]
+                    if start <= original_loc[d] < end:
+                        candidates.append(i)
+                    # Also include previous tile if voxel falls in the overlap
+                    elif i > 0 and original_loc[d] < start and original_loc[d] >= start - self.min_overlap_voxels[d]:
+                        candidates.append(i - 1)
+                if not candidates:
+                    # If voxel is exactly at the end boundary
+                    candidates.append(len(self.division_points[d]) - 2)
+                if d == 0:
+                    tile_indices = [[i] for i in candidates]
+                else:
+                    # Expand combinations across dimensions
+                    tile_indices = [prev + [i] for prev in tile_indices for i in candidates]
 
-            # Compute voxel coordinate inside that tile
-            tile_loc = np.array([
-                original_loc[d] - self.division_points[d][tile_idx[d]]
-                for d in range(3)
-            ])
+            # Convert tile indices to tile_loc
+            for idx in tile_indices:
+                tile_loc = np.array([
+                    original_loc[d] - self.division_points[d][idx[d]]
+                    for d in range(3)
+                ])
+                tiles.append((np.array(idx), tile_loc))
 
-            return tile_idx, tile_loc
+            return tiles
+
         
         def tile_to_original(tile_idx, tile_loc=np.array([0, 0, 0])):
             tile_idx = np.array(tile_idx)
@@ -121,15 +138,21 @@ class TomoTiles:
             ])
 
         # Save functions as class attributes
-        self.original_to_tile = original_to_tile
+        self.original_to_tiles = original_to_tiles
         self.tile_to_original = tile_to_original
 
-        return self.original_to_tile, self.tile_to_original
+        return self.original_to_tiles, self.tile_to_original
     
-    def tile_tomogram_points(self, tile_size_angstroms: np.ndarray=np.array([1280, 2560, 2560]), tiles_dir: str='tiles', overwrite=False):
+    def tile_tomogram_points(
+            self, 
+            tile_size_angstroms: np.ndarray=np.array([1280, 2560, 2560]), 
+            min_overlap_angstroms: np.ndarray=np.array([100, 100, 100]), # To ensure a target is not split between tiles 
+            tiles_dir: str='tiles', 
+            overwrite=False
+        ):
         """Tile up the tomogram, retaining and transforming any point annotations pertaining to this tomogram."""
-        if self.original_to_tile is None or self.tile_to_original is None or self.tile_num_per_dim is None:
-            self.get_tiling_functions(tile_size_angstroms)
+        # if self.original_to_tiles is None or self.tile_to_original is None or self.tile_num_per_dim is None:
+        self.get_tiling_functions(tile_size_angstroms, min_overlap_angstroms)
         tile_size_voxels = self.angstroms_to_voxels(tile_size_angstroms)
 
         # Full tomogram array
@@ -158,8 +181,10 @@ class TomoTiles:
                     ann['location']['y'],
                     ann['location']['x'],
                 ])
-                tile_idx, tile_loc = self.original_to_tile(point_original)
-                point_locs_by_tile[tuple(int(i) for i in tile_idx)].append(tuple(int(i) for i in tile_loc))
+                for tile_idx, tile_loc in self.original_to_tiles(point_original):
+                    key = tuple(int(i) for i in tile_idx)
+                    value = tuple(int(i) for i in tile_loc)
+                    point_locs_by_tile[key].append(value)
             
         def write_points_to_json(json_path, points: list):
             if len(points) == 0:
@@ -184,10 +209,6 @@ class TomoTiles:
             tc = tile_top_corner.astype(int)
             bc = tile_bottom_corner.astype(int)
             tile_array = tomo_array[tc[0]:bc[0], tc[1]:bc[1], tc[2]:bc[2]]
-
-            if np.all((i, j, k) == (0, 1, 1)):
-                from pdb import set_trace
-                set_trace()
 
             # Save it as np.ndarray
             tile_name = f'tile-{i}-{j}-{k}'
@@ -222,24 +243,24 @@ class TomoTiles:
                     f.result()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--index", type=int, required=True)
-    parser.add_argument(
-        "--data-path", 
-        type=str,
-        default="/home/mward19/nobackup/autodelete/fm-data-2"
-    )
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--index", type=int, required=True)
+    # parser.add_argument(
+    #     "--data-path", 
+    #     type=str,
+    #     default="/home/mward19/nobackup/autodelete/fm-data-2"
+    # )
+    # args = parser.parse_args()
 
-    dirs = sorted(
-        d for d in os.listdir(args.data_path)
-        if d.startswith("tomo-")
-    )
+    # dirs = sorted(
+    #     d for d in os.listdir(args.data_path)
+    #     if d.startswith("tomo-")
+    # )
 
-    target = os.path.join(args.data_path, dirs[args.index])
+    # target = os.path.join(args.data_path, dirs[args.index])
 
+    # tiler = TomoTiles(target)
+    # tiler.tile_tomogram_points(overwrite=True, tiles_dir='tiles-overlapped')
+    target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10233'
     tiler = TomoTiles(target)
     tiler.tile_tomogram_points(overwrite=True)
-    # target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10233'
-    # tiler = TomoTiles(target)
-    # tiler.tile_tomogram_points(overwrite=True)
