@@ -76,6 +76,8 @@ class TomoTiles:
         # Divide up tomogram array
 
         tomo_shape_angstroms = self.voxels_to_angstroms(self.tomo_shape)
+        tile_size_voxels = self.angstroms_to_voxels(tile_size_angstroms)
+        min_overlap_voxels = self.angstroms_to_voxels(min_overlap_angstroms)
 
         # Calculate how many tiles we can fit in each dimension 
         # (cover whole tomogram with minimal overlap between tiles)
@@ -95,36 +97,26 @@ class TomoTiles:
         # Function to convert original loc to tile loc (in voxels)
         def original_to_tiles(original_loc):
             original_loc = np.array(original_loc)
-            tiles = []
+            candidate_indices_per_dim = []
 
             for d in range(3):
-                # Find all tiles along this dimension that contain the voxel
-                # Tile covers from division_point to division_point + tile_size
                 candidates = []
-                for i in range(len(self.division_points[d]) - 1):
-                    start = self.division_points[d][i]
-                    end = self.division_points[d][i + 1]
-                    if start <= original_loc[d] < end:
+                for i, start in enumerate(self.division_points[d]):
+                    end = start + tile_size_voxels[d]
+                    # Include point if in current tile
+                    if start <= original_loc[d] < end or (i == len(self.division_points[d]) - 1 and original_loc[d] >= start):
                         candidates.append(i)
-                    # Also include previous tile if voxel falls in the overlap
-                    elif i > 0 and original_loc[d] < start and original_loc[d] >= start - self.min_overlap_voxels[d]:
-                        candidates.append(i - 1)
-                if not candidates:
-                    # If voxel is exactly at the end boundary
-                    candidates.append(len(self.division_points[d]) - 2)
-                if d == 0:
-                    tile_indices = [[i] for i in candidates]
-                else:
-                    # Expand combinations across dimensions
-                    tile_indices = [prev + [i] for prev in tile_indices for i in candidates]
+                        # include previous tile if overlap
+                        if i > 0 and original_loc[d] < start + min_overlap_voxels[d]:
+                            candidates.append(i - 1)
+                candidate_indices_per_dim.append(sorted(set(candidates)))
 
-            # Convert tile indices to tile_loc
-            for idx in tile_indices:
-                tile_loc = np.array([
-                    original_loc[d] - self.division_points[d][idx[d]]
-                    for d in range(3)
-                ])
-                tiles.append((np.array(idx), tile_loc))
+            # compute cartesian product across dimensions
+            from itertools import product
+            tiles = []
+            for idx in product(*candidate_indices_per_dim):
+                tile_loc = original_loc - np.array([self.division_points[d][idx[d]] for d in range(3)])
+                tiles.append((np.array(idx), tile_loc.astype(int)))
 
             return tiles
 
@@ -234,7 +226,7 @@ class TomoTiles:
 
         # for indices in tqdm(all_tile_indices, desc='Saving tiles'):
         with tqdm(total=len(all_tile_indices), desc='Saving tiles') as pbar:
-            with ThreadPoolExecutor(max_workers=1) as executor:
+            with ThreadPoolExecutor(max_workers=4) as executor:
                 tqdm.write(f'Working with up to {executor._max_workers} workers')
                 tqdm.write(f'Saving to {self.tiles_dir}')
                 futures = [executor.submit(save_tile, idx, pbar) for idx in all_tile_indices]
@@ -243,24 +235,24 @@ class TomoTiles:
                     f.result()
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--index", type=int, required=True)
-    # parser.add_argument(
-    #     "--data-path", 
-    #     type=str,
-    #     default="/home/mward19/nobackup/autodelete/fm-data-2"
-    # )
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--index", type=int, required=True)
+    parser.add_argument(
+        "--data-path", 
+        type=str,
+        default="/home/mward19/nobackup/autodelete/fm-data-2"
+    )
+    args = parser.parse_args()
 
-    # dirs = sorted(
-    #     d for d in os.listdir(args.data_path)
-    #     if d.startswith("tomo-")
-    # )
+    dirs = sorted(
+        d for d in os.listdir(args.data_path)
+        if d.startswith("tomo-")
+    )
 
-    # target = os.path.join(args.data_path, dirs[args.index])
+    target = os.path.join(args.data_path, dirs[args.index])
 
-    # tiler = TomoTiles(target)
-    # tiler.tile_tomogram_points(overwrite=True, tiles_dir='tiles-overlapped')
-    target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10233'
     tiler = TomoTiles(target)
-    tiler.tile_tomogram_points(overwrite=True)
+    tiler.tile_tomogram_points(overwrite=True, tiles_dir='tiles-overlapped')
+    # target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10456'
+    # tiler = TomoTiles(target)
+    # tiler.tile_tomogram_points(overwrite=True, min_overlap_angstroms = np.array([600, 600, 600]))

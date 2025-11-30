@@ -2,7 +2,7 @@
 #SBATCH --job-name=tomo_tiles
 #SBATCH --output=/home/mward19/nobackup/autodelete/logs/%A_%a.out
 #SBATCH --error=/home/mward19/nobackup/autodelete/logs/%A_%a.err
-#SBATCH --array=0-1558
+#SBATCH --array=0-1559
 #SBATCH --time=00:30:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
