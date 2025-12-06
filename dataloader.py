@@ -99,7 +99,8 @@ class SubtomogramPointDataset(Dataset):
             return tile, points
 
 
-if __name__ == '__main__':
+def test_viz():
+    """Debugging."""
     def clip_percentile(arr):
         lo, hi = np.percentile(arr, [2, 98])
         return np.clip(arr, lo, hi)
