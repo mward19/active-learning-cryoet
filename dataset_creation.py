@@ -84,15 +84,25 @@ class TomoTiles:
         step_size_angstroms = tile_size_angstroms - min_overlap_angstroms
         self.tile_num_per_dim = np.ceil(tomo_shape_angstroms / step_size_angstroms).astype(int)
         # Get tile division points
-        self.division_points = [
-            np.linspace(
-                0, 
-                self.tomo_shape[i], 
-                self.tile_num_per_dim[i],
-                endpoint=False
-            ) 
-            for i in range(3)
-        ]
+        self.division_points = []
+        for d in range(3):
+            tile = int(round(tile_size_voxels[d]))
+            size = int(self.tomo_shape[d])
+            min_ovl = int(round(min_overlap_voxels[d]))
+            
+            step = tile - min_ovl
+            if step <= 0:
+                raise ValueError(f"Tile size must be larger than minimal overlap in dimension {d}")
+
+            n_tiles = max(1, math.ceil((size - tile) / step) + 1)
+            if n_tiles > 1:
+                step = (size - tile) / (n_tiles - 1)
+            else:
+                step = 0
+
+            starts = np.array([int(round(i * step)) for i in range(n_tiles)])
+            self.division_points.append(starts)
+
 
         # Function to convert original loc to tile loc (in voxels)
         def original_to_tiles(original_loc):
@@ -201,6 +211,9 @@ class TomoTiles:
             tc = tile_top_corner.astype(int)
             bc = tile_bottom_corner.astype(int)
             tile_array = tomo_array[tc[0]:bc[0], tc[1]:bc[1], tc[2]:bc[2]]
+            expected_shape = tuple(tile_size_voxels.astype(int))  # (z, y, x)
+            assert tile_array.shape == expected_shape, f"Tile shape {tile_array.shape} does not match expected {expected_shape}"
+
 
             # Save it as np.ndarray
             tile_name = f'tile-{i}-{j}-{k}'
