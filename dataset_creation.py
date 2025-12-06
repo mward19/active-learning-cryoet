@@ -199,9 +199,9 @@ class TomoTiles:
 
         # Start separating and saving tiles
         all_tile_indices = list(product(
-            range(int(self.tile_num_per_dim[0])), 
-            range(int(self.tile_num_per_dim[1])), 
-            range(int(self.tile_num_per_dim[2]))
+            range(len(self.division_points[0])),
+            range(len(self.division_points[1])),
+            range(len(self.division_points[2]))
         ))
 
         def save_tile(indices, pbar):
