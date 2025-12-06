@@ -165,6 +165,9 @@ class TomoTiles:
                 f"Tomogram array shape in tomo-metadata was {self.tomo_shape} "
                 f"but did not match the actual tomogram array shape {tomo_array.shape}"
             )
+        if any(ts > s for ts, s in zip(tile_size_voxels, tomo_array.shape)):
+            raise ValueError("Tile size is larger than the tomogram dimensions.")
+
         
         tiles_dir_full = os.path.join(self.tomo_dir, tiles_dir)
         os.makedirs(tiles_dir_full, exist_ok=True)
@@ -212,7 +215,8 @@ class TomoTiles:
             bc = tile_bottom_corner.astype(int)
             tile_array = tomo_array[tc[0]:bc[0], tc[1]:bc[1], tc[2]:bc[2]]
             expected_shape = tuple(tile_size_voxels.astype(int))  # (z, y, x)
-            assert tile_array.shape == expected_shape, f"Tile shape {tile_array.shape} does not match expected {expected_shape}"
+            if tile_array.shape != expected_shape:
+                raise ValueError(f"Tile shape {tile_array.shape} does not match expected {expected_shape}")
 
 
             # Save it as np.ndarray
@@ -248,6 +252,7 @@ class TomoTiles:
                     f.result()
 
 if __name__ == "__main__":
+    print('Starting job')
     parser = argparse.ArgumentParser()
     parser.add_argument("--index", type=int, required=True)
     parser.add_argument(
@@ -265,7 +270,7 @@ if __name__ == "__main__":
     target = os.path.join(args.data_path, dirs[args.index])
 
     tiler = TomoTiles(target)
-    tiler.tile_tomogram_points(overwrite=True, tiles_dir='tiles-overlapped')
+    tiler.tile_tomogram_points(overwrite=True, tiles_dir='tiling-5')
     # target = '/home/mward19/nobackup/autodelete/fm-data-2/tomo-10456'
     # tiler = TomoTiles(target)
     # tiler.tile_tomogram_points(overwrite=True, min_overlap_angstroms = np.array([600, 600, 600]))

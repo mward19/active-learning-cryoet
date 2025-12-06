@@ -16,12 +16,13 @@ class SubtomogramPointDataset(Dataset):
     contains at least one point, false if zero points. If bool_mode is off,
     returns the list of points in the tile.
     """
-    def __init__(self, base_dir, bool_mode=True, max_tiles=None):
+    def __init__(self, base_dir, tiles_dir_name='tiling-5', bool_mode=True, max_tiles=None):
         self.base_dir = base_dir
         self.bool_mode = bool_mode
 
+        self.tiles_dir_name = tiles_dir_name
+
         self.tomo_dir_regex = re.compile(r'^tomo-(\d+)$')
-        self.all_tiles_dir_regex = re.compile(r'^tiles-overlapped$')
         self.tile_dir_regex = re.compile(r'^tile-(\d+)-(\d+)-(\d+)$')
         self.points_regex = re.compile(r'^points\.json$')
 
@@ -41,7 +42,7 @@ class SubtomogramPointDataset(Dataset):
             if not self.tomo_dir_regex.fullmatch(tomo.name):
                 continue
 
-            tiles_root = os.path.join(tomo.path, "tiles-overlapped")
+            tiles_root = os.path.join(tomo.path, self.tiles_dir_name)
             if not os.path.isdir(tiles_root):
                 continue
 
@@ -104,7 +105,15 @@ if __name__ == '__main__':
         return np.clip(arr, lo, hi)
     spd = SubtomogramPointDataset(r'/home/mward19/nobackup/autodelete/fm-data-2', bool_mode=False, max_tiles=1000)
     from matplotlib import pyplot as plt
-    tile, points = spd.get_positive_sample(7)
-    plt.imshow(clip_percentile(tile[points[0][0]]), cmap='gray')
-    plt.title(points)
-    plt.savefig('temp.png')
+    for idx in tqdm(range(spd.num_positive_samples()), total=spd.num_positive_samples()):
+        tile, points = spd.get_positive_sample(idx)
+        path = spd.samples[spd.positive_indices[idx]][0]
+        try:
+            plt.figure()
+            plt.imshow(clip_percentile(tile[points[0][0]]), cmap='gray')
+            plt.title('\n'.join([path[i:i+40] for i in range(0, len(path), 40)]))
+            plt.scatter(points[0][2], points[0][1], c='red')
+            plt.savefig(f'temp/positive-{idx}.png')
+            plt.close()
+        except:
+            tqdm.write(f'Index {idx} is bad: see {path}')
