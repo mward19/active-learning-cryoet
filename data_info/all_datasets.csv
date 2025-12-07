@@ -1,0 +1,93 @@
+Dataset ID,Dataset Name,Num Tomograms
+10235,S. typhimurium  T3SS minicells,26
+10233,S. typhimurium  Salomella rabbit ears: 30min penicillin treatment with sucrose and MgSO4,3
+10074,L. pneumophila JV5443,7
+10278,P. aeruginosa PAO1 Wild Type,10
+10231,Salmonella fliS knockout minicells,2
+10072,L. pneumophila JV3588_∆dotK,7
+10239,"WT Salmonella minicell-producing strain, 5x conc.",11
+10281,P. aeruginosa PW1305,11
+10285,Pseudomonas aeruginosa PAO1,15
+10156,Bdellovibrio/E. coli minicell,89
+10241,"Salmonella minicells for fliL flagella, and T3SS.",57
+10268,Vibrio Yi-Wei style,20
+10282,P. aeruginosa PW1307,26
+10144,H. pylori 26695 WT / AGS,1
+10265,Vibrio CheWCheWCheA knockout,8
+10280,P. aeruginosa PAOI delta aer2 pJN105-aer2,40
+10064,L. pneumophila JV2067,4
+10200,Vibrio fischeri flgP-deletion flagella,2
+10155,Bdellovibrio attack-phase,86
+10224,flgP deletion Campy mutants,37
+10079,L. pneumophila JV7091_∆dotEP,5
+10234,S. typhimurium  Salomella rabbit ears: 45min penicillin treatment with sucrose and MgSO4,5
+10215,High magnification tomograms of whole FlgP mutant Campylobacter cells,27
+10159,Helicobacter pylori G27,1
+10210,Campy motA deletion mutant,18
+10214,Campylobacter cjj0996 cells,9
+10147,H.pylori 26695 WT / AGS,2
+10206,Campy cjj0413,29
+10218,High magnification tomograms of whole WT Campylobacter cells,155
+10062,L. pneumophila JV1181,4
+10222,Medium magnification tomograms of whole WT Campylobacter cells,11
+10269,Vibrio cholerae C6706 ∆lacZ,6
+10076,L. pneumophila JV6781_∆dotLOB,1
+10271,Vibrio cholerae PM18,25
+10275,Vibrio delta-CheA3,15
+10167,Caulobacter del-tipN,1
+10069,L. pneumophila JV3572,7
+10152,H.pylori 26695 delta-cagH / AGS,1
+10274,Vibrio delta-CheA1,21
+10284,P. aeruginosa PW3654,6
+10219,Medium magnification tomograms of fliI knockout Campylobacter cells,35
+10225,S. typhimurium,7
+10236,Test run of Salmonella rabbit ears,5
+10142,H. pylori 26695 / Hs.746T,6
+10228,Salmonella fliL knockout minicells,3
+10154,Helicobacter pylori 26695,13
+10102,"Swarmer cell, long cell of Proteus mirabilis",16
+10286,Pseudomonas full length aer2,33
+10201,Campylobacter jejuni,16
+10211,Campy motB deletion,15
+10226,S. typhimurium  FliL deletion (plus T3SS),34
+10198,Vibrio fischeri WT flagella,12
+10266,Vibrio DeltaVC1403,16
+10139,H. pylori 26695,10
+10153,H.pylori with treatment A,2
+10223,flgP deletion Campy cells,15
+10261,Vibrio harveyi,7
+10217,High magnification tomograms of whole PflA mutant Campylobacter cells,1
+10267,Vibrio PM15,11
+10260,V. harveyi LuxQ OE,9
+10202,Auto-reconstruct 0,42
+10213,Campylobacter cjj0840 cells,8
+10207,Campy cjj0413 deletions,21
+10276,Vibrio deltaCheA2,29
+10237,WT Salmonella minicell-producing strain,20
+10221,Medium magnification tomograms of whole FlgQ mutant Campylobacter cells,5
+10164,Hyphomonas 'AR43',1
+10240,WT Salmonella minicells,19
+10205,Campy Titan Krios dataset,22
+10229,Salmonella fliL minicells with T3SS,31
+10168,Caulobacter del-tipN + Nal,1
+10263,"V. cholerae delta CheA1,2,3",7
+10238,"WT Salmonella minicell-producing strain 17261, 5hr growth",9
+10075,L. pneumophila JV5460,3
+10262,Thermococcus kodakarensis,3
+10141,H. pylori 26695 / AGS,8
+10272,Vibrio cholerae PM5,13
+10273,Vibrio cholerae PM6,11
+10277,Vibrio deltaVCA1092,13
+10216,High magnification tomograms of whole FlgQ mutant Campylobacter cells,24
+10157,Bdellovibrio/Vibrio cholerae,19
+10232,S. typhimurium  Salomella rabbit ears: 15min penicillin treatment with MgSO4,4
+10270,Vibrio cholerae PM16,20
+10140,H. pylori 26695 / 20 nm gold-DNA,9
+10161,Hylemonella gracilis,40
+10230,Salmonella fliL-mutant minicells,8
+10160,Hylemonella + Bdellovibrio,18
+10220,Medium magnification tomograms of whole FlgP mutant Campylobacter cells,7
+10283,P. aeruginosa PW1312,3
+10279,P. aeruginosa PAOI delta aer2,17
+10287,H.hepaticus,15
+10212,Campy motB mutant,32

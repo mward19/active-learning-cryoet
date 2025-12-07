@@ -12,7 +12,7 @@ import contextlib
 import sys
 
 from collections import defaultdict
-import math
+import csv
 from typing import List
 import os
 import json
@@ -77,13 +77,77 @@ def save_tomos_with_obj(objects: List[str], save_dir, ensure_newest=False):
             with open(tomo_metadata_path, 'w') as f:
                 json.dump(tomo_metadata, f)
 
+def get_tomo_ids_in_dataset(dataset_ids, objects, filepath=None):
+    client = Client()
+    annotations = sum(
+        (Annotation.find(
+            client, 
+            [Annotation.run.dataset_id == int(id_) and Annotation.object_name == obj]) 
+            for id_ in dataset_ids for obj in objects
+        ),
+        start=[]
+    )
+    if len(annotations) == 0:
+        raise Exception(f'Found 0 annotations corresponding to {object}. Exiting')
+    
+    # Collect tomogram ids
+    ids = []
+    for ann in tqdm(annotations, desc='Collecting tomogram IDs'):
+        all_tomograms = ann.run.tomograms
+        if len(all_tomograms) != 1:
+            raise ValueError(f'Annotation {ann.id} has more than 1 associated tomogram (it has {len(all_tomograms)})')
+        tomogram = all_tomograms[0]
 
+        # Collect ids
+        ids.append(int(tomogram.id))
+
+    if filepath is not None:
+        with open(filepath, 'w') as f:
+            f.write(f"Tomogram IDs\n")
+            for id_ in ids:
+                f.write(f"{id_}\n")
+    return ids
+
+def get_all_dataset_names_and_lengths(objects: list[str], filepath=None):
+    client = Client()
+    annotations = sum(
+        (Annotation.find(client, [Annotation.object_name == obj]) for obj in objects),
+        start=[]
+    )
+    
+    if len(annotations) == 0:
+        raise Exception(f'Found 0 annotations corresponding to {objects}. Exiting')
+    
+    # Map dataset names to number of tomograms
+    dataset_counts = {}
+    dataset_names = {}
+    for ann in tqdm(annotations, desc='Collecting dataset names'):
+        dataset_name = ann.run.dataset.title
+        dataset_id = ann.run.dataset.id
+        num_tomos = len(ann.run.tomograms)
+        dataset_counts[dataset_id] = dataset_counts.get(dataset_id, 0) + num_tomos
+        if dataset_id not in dataset_names:
+            dataset_names[dataset_id] = dataset_name
+
+    if filepath is not None:
+        with open(filepath, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Dataset ID', 'Dataset Name', 'Num Tomograms'])
+            for dataset_id in dataset_counts.keys():
+                name = dataset_names[dataset_id]
+                count = dataset_counts[dataset_id]
+                writer.writerow([dataset_id, name, count])
+    return dataset_names, dataset_counts
 
 if __name__ == '__main__':
-    save_tomos_with_obj(
-        ['bacterial-type flagellum motor'],
-        '/home/mward19/nobackup/autodelete/fm-data-2'
-    )
+    objects = ['bacterial-type flagellum motor']
+    # save_tomos_with_obj(
+    #     objects,
+    #     '/home/mward19/nobackup/autodelete/fm-data-2'
+    # )
+    # print(get_tomo_ids_in_dataset([10235], objects, r'./data_info/all_ids.csv'))
+    # print(get_all_dataset_names_and_lengths(objects, 'data_info/all_datasets.csv'))
+
     # from dataset import TomoTiles
     # read_zarr = TomoTiles.read_zarr
     # tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
