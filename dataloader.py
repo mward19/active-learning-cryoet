@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from tqdm.auto import tqdm
+import pandas as pd
 
 import json
 import os
@@ -108,7 +109,16 @@ class SubtomogramPointDataset(Dataset):
 
         return tile, label
 
+def get_train_dataset_ids():
+    train_dataset_info = pd.read_csv('data_info/train_datasets.csv')
+    return train_dataset_info['Dataset ID'].astype(int).to_list()
 
+def get_val_dataset_ids():
+    val_dataset_info = pd.read_csv('data_info/val_datasets.csv')
+    return val_dataset_info['Dataset ID'].astype(int).to_list()
+
+def get_train_val_dataset_ids():
+    return get_train_dataset_ids(), get_val_dataset_ids()
 
 def test_viz():
     """Debugging."""

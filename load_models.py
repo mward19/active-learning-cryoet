@@ -121,20 +121,27 @@ class ResNet3D(SubtomogramClassifier):
 
 if __name__ == '__main__':
     from dataloader import SubtomogramPointDataset
-    from torch.utils.data import random_split
+    from dataloader import get_train_val_dataset_ids
 
     model = ResNet3D()
 
     print('Loaded model')
 
-    dataset = SubtomogramPointDataset(
+    # Gets train/val split from data_info directory
+    train_ids, val_ids = get_train_val_dataset_ids() 
+
+    train_dataset = SubtomogramPointDataset(
         r'/home/mward19/nobackup/autodelete/fm-data-2', 
         return_class=True, 
-        max_tiles=100
+        max_tiles=100,
+        tomo_ids
     )
+
+
 
     model.init_training(dataset, None)
     model.train_step([0, 1, 2])
+    model.validation_step()
 
 
 

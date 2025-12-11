@@ -139,16 +139,16 @@ def get_all_dataset_names_and_lengths(objects: list[str], filepath=None):
                 writer.writerow([dataset_id, name, count])
     return dataset_names, dataset_counts
 
-if __name__ == '__main__':
+def download_tomo_ids():
     objects = ['bacterial-type flagellum motor']
-    # save_tomos_with_obj(
-    #     objects,
-    #     '/home/mward19/nobackup/autodelete/fm-data-2'
-    # )
-    # print(get_tomo_ids_in_dataset([10235], objects, r'./data_info/all_ids.csv'))
-    # print(get_all_dataset_names_and_lengths(objects, 'data_info/all_datasets.csv'))
 
-    # from dataset import TomoTiles
-    # read_zarr = TomoTiles.read_zarr
-    # tomo_array = read_zarr('/home/mward19/nobackup/autodelete/fm-data-2/tomo-10472/mba2011-08-26-1.zarr')
-    # print(tomo_array.shape)
+    from dataloader import get_train_val_dataset_ids
+    train_ids, val_ids = get_train_val_dataset_ids()
+
+    print('Fetching IDs')
+    get_tomo_ids_in_dataset(train_ids, objects, './data_info/train_tomo_ids.csv')
+    get_tomo_ids_in_dataset(val_ids, objects, './data_info/val_tomo_ids.csv')
+
+if __name__ == '__main__':
+    # objects = ['bacterial-type flagellum motor']
+    download_tomo_ids()
