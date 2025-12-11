@@ -82,7 +82,10 @@ def get_tomo_ids_in_dataset(dataset_ids, objects, filepath=None):
     annotations = sum(
         (Annotation.find(
             client, 
-            [Annotation.run.dataset_id == int(id_) and Annotation.object_name == obj]) 
+            [
+                Annotation.run.dataset_id == int(id_), 
+                Annotation.object_name == obj
+            ]) 
             for id_ in dataset_ids for obj in objects
         ),
         start=[]
@@ -146,8 +149,9 @@ def download_tomo_ids():
     train_ids, val_ids = get_train_val_dataset_ids()
 
     print('Fetching IDs')
-    get_tomo_ids_in_dataset(train_ids, objects, './data_info/train_tomo_ids.csv')
     get_tomo_ids_in_dataset(val_ids, objects, './data_info/val_tomo_ids.csv')
+    get_tomo_ids_in_dataset(train_ids, objects, './data_info/train_tomo_ids.csv')
+    
 
 if __name__ == '__main__':
     # objects = ['bacterial-type flagellum motor']
